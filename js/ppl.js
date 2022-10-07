@@ -3,6 +3,8 @@ const oBallArea = $(".ball-area");
 const oGameArea = $(".game-area");
 const oArrow = $(".arrow");
 const oBullet = $(".bullet");
+const oStart = $('.start');
+const oScore = $('.score');
 const size = 44;
 const maxH = oBallArea.offsetHeight;
 const maxW = oBallArea.offsetWidth;
@@ -10,9 +12,25 @@ const maxRows = ~~(maxH / size);
 const maxColumns = ~~(maxW / size);
 let bullet = { color: "red" };
 let idx = 0;
-init();
+let lock = false;
+let firstClick = false;
+let count = [];
+
 initArrow();
 initBullte();
+
+oStart.addEventListener('click',function(){
+  let ballTimer;
+  firstClick = true;
+  lock = true;
+  init();
+  clearInterval(ballTimer);
+  if(firstClick){
+    ballTimer= setInterval(()=>{
+      initRowBall();
+    },7500);
+  }
+},false)
 
 /**
  * @description: 初始化小球并将其隐藏
@@ -25,7 +43,6 @@ function init() {
     for (let j = 0; j < maxColumns - Number(isOdd); j++) {
       let ele = document.createElement("div");
       ele.classList.add("ball");
-      ele.innerText = idx;
       let left = size * (j + (i % 2) / 2);
       let top = i * (size - (i && 6));
       let color = randomColor();
@@ -42,7 +59,9 @@ function init() {
         {
           set(target, key, value) {
             if (key === "connect" && value === false) {
+              count.push(ballsData[target.idx].ele);
               dropOff(ballsData[target.idx].ele);
+              oScore.innerText = count.length;
             }
             target[key] = value;
           },
@@ -166,7 +185,7 @@ function getFreeSpace(idx, { x = 0, y = 0 } = {}) {
     return idx;
   }
   let balls = Object.entries(findSiblings(idx))
-    .map(([key, value]) => value)
+    .map(([, value]) => value)
     .filter((item) => {
       return ballsData[item]?.connect === false;
     })
@@ -177,17 +196,19 @@ function getFreeSpace(idx, { x = 0, y = 0 } = {}) {
 oGameArea.addEventListener(
   "mousemove",
   function (e) {
-    let ex = e.clientX,
-      ey = e.clientY;
-    let { top: oy, left: ox } = getPosition(oArrow);
-    ox += oArrow.offsetWidth / 2;
-    oy += 56;
-    //计算箭头旋转中心与鼠标点的夹角
-    let iAngle = Math.abs((Math.atan2(ey - oy, ex - ox) * 180) / Math.PI); //0-180 10-170
-    iAngle = Math.min(170, Math.max(10, iAngle));
-    iAngle = (-iAngle * Math.PI) / 180;
-    iAngle += Math.PI / 2;
-    oArrow.style.transform = `rotate(${(iAngle * 180) / Math.PI}deg)`;
+    if(lock === true){
+      let ex = e.clientX,
+          ey = e.clientY;
+      let { top: oy, left: ox } = getPosition(oArrow);
+      ox += oArrow.offsetWidth / 2;
+      oy += 56;
+      //计算箭头旋转中心与鼠标点的夹角
+      let iAngle = Math.abs((Math.atan2(ey - oy, ex - ox) * 180) / Math.PI); //0-180 10-170
+      iAngle = Math.min(170, Math.max(10, iAngle));
+      iAngle = (-iAngle * Math.PI) / 180;
+      iAngle += Math.PI / 2;
+      oArrow.style.transform = `rotate(${(iAngle * 180) / Math.PI}deg)`;
+    }
   },
   false
 );
@@ -195,38 +216,45 @@ oGameArea.addEventListener(
 oBallArea.addEventListener(
   "mousedown",
   function () {
-    let timer,
-      speed = 18;
-    let _speedX = speed;
-    //发射子弹，子弹发射角度
-    let iAngle = Number(oArrow.style.transform.match(/rotate\((.+)deg\)/)?.[1]);
-    clearInterval(timer);
-    timer = setInterval(() => {
-      let x = oBullet.offsetLeft,
-        y = oBullet.offsetTop;
-      if (x < 0 || x > oBallArea.offsetWidth - size) {
-        _speedX *= -1;
-      }
+    if (lock===true){
+      let timer,
+          speed = 18;
+      let _speedX = speed;
+      //发射子弹，子弹发射角度
+      let iAngle = Number(oArrow.style.transform.match(/rotate\((.+)deg\)/)?.[1]);
+      clearInterval(timer);
+      timer = setInterval(() => {
+        let x = oBullet.offsetLeft,
+            y = oBullet.offsetTop;
+        if (x < 0 || x > oBallArea.offsetWidth - size) {
+          _speedX *= -1;
+        }
 
-      let collisionBalls = collisionBall({ x, y });
-      if (collisionBalls?.length > 0) {
-        //最短距离的球的下标数组
-        let collisionIdx = getShortDistance(collisionBalls);
-        //寻找碰撞到的球的最近的非连接的兄弟球的下标
-        let targetIdx = getFreeSpace(collisionIdx, { x, y });
-        //命中处理
-        hitTarget(targetIdx);
-        clearInterval(timer);
-        return false;
-      }
+        let collisionBalls = collisionBall({ x, y });
+        if (collisionBalls?.length > 0) {
+          //最短距离的球的下标数组
+          let collisionIdx = getShortDistance(collisionBalls);
+          //寻找碰撞到的球的最近的非连接的兄弟球的下标
+          let targetIdx = getFreeSpace(collisionIdx, { x, y });
+          if(targetIdx.length === 0){
+            alert(`游戏结束!!!您的得分是${count.length}`);
+            clearInterval(timer);
+            location.reload();
+          }
+          //命中处理
+          hitTarget(targetIdx);
+          clearInterval(timer);
+          return false;
+        }
 
-      //判断是否发生碰撞
-      x += _speedX * Math.cos(((iAngle - 90) * Math.PI) / 180);
-      y += speed * Math.sin(((iAngle - 90) * Math.PI) / 180);
+        //判断是否发生碰撞
+        x += _speedX * Math.cos(((iAngle - 90) * Math.PI) / 180);
+        y += speed * Math.sin(((iAngle - 90) * Math.PI) / 180);
 
-      oBullet.style.left = x + "px";
-      oBullet.style.top = y + "px";
-    }, 1000 / 60);
+        oBullet.style.left = x + "px";
+        oBullet.style.top = y + "px";
+      }, 1000 / 120);
+    }
   },
   false
 );
@@ -267,6 +295,12 @@ function placeBall(ball, color = "") {
     backgroundColor: ball.color,
   });
 }
+
+function initRowBall(){
+  let initBall = ballsData.filter(item=>item.connect===false).slice(0,9);
+  initBall.forEach(item=>placeBall(item));
+}
+
 
 /**
  * @description: 小球掉落动画效果
@@ -366,7 +400,7 @@ function findSeriesNode(sameColorSiblings = [], color) {
  */
 function getSameTypeSibilings(idx, color = false) {
   return Object.entries(findSiblings(idx))
-    .map(([key, value]) => value)
+    .map(([, value]) => value)
     .filter((item) => {
       //过滤出 对应下标 item 的ball的颜色是否和 ball[idx]的颜色是否一致
       if (!ballsData[item]) {
@@ -461,3 +495,5 @@ function randomColor() {
   ];
   return COLORS[~~(Math.random() * COLORS.length)];
 }
+
+
